@@ -4,7 +4,7 @@
     partition_by="date",
     dimension_column=None,
     threshold=3,
-    column_name=None 
+    column_name=None
 ) %}
 
 {%- set dim_cols = [] -%}
@@ -15,7 +15,6 @@
 {%- endif -%}
 
 with base as (
-
   select
     {{ partition_by }} as dt,
     {{ metric_column }} as metric_value,
@@ -23,7 +22,6 @@ with base as (
       {{ col }} as {{ col }}{% if not loop.last %},{% endif %}
     {% endfor %}
   from {{ model }}
-
 ),
 
 recent as (
@@ -39,6 +37,7 @@ recent as (
       rows between 30 preceding and 1 preceding
     ) as moving_avg
   from base
+  where dt = date_sub(current_date(), interval 1 day)
 )
 
 select *
