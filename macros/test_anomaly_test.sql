@@ -4,7 +4,7 @@
     partition_by="date",
     dimension_column=None,
     threshold=3,
-    column_name=None  -- allows use in columns: section
+    column_name=None 
 ) %}
 
 {%- set dim_cols = [] -%}
