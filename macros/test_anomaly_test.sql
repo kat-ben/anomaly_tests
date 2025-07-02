@@ -1,4 +1,4 @@
-{% test test_anomaly_test(
+{% test anomaly_test(
     model,
     metric_column,
     partition_by="date",
