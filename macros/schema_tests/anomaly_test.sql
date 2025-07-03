@@ -1,70 +1,97 @@
 {% test anomaly_test(
     model,
     metric_column,
-    threshold,
-    lookback_days,
-    dimension_column=None,
-    time_column="Date",
-    column_name=None
+    partition_by,
+    group_by=None,
+    tolerance=20,
+    rolling_window=30,
+    column_name=None  -- For use in 'columns:' section
 ) %}
 
-{# Convert dimension_column to list if it's a string #}
-{% set group_by = [] %}
-{% if dimension_column is string %}
-  {% set group_by = [dimension_column] %}
-{% elif dimension_column is iterable %}
-  {% set group_by = dimension_column %}
+{% set group_cols = [] %}
+{% if group_by is string %}
+  {% set group_cols = [group_by] %}
+{% elif group_by is iterable %}
+  {% set group_cols = group_by %}
 {% endif %}
 
--- Base: Aggregate metric_value at time + dimension level
 with base as (
     select
-        {{ time_column }} as dt,
-        {% for col in group_by %}
-            {{ col }},
-        {% endfor %}
+        {{ partition_by }} as dt,
+        {% if group_cols %}
+            {% for col in group_cols %}
+                {{ col }} as {{ col }},
+            {% endfor %}
+        {% endif %}
         sum({{ metric_column }}) as metric_value
     from {{ model }}
-    where {{ time_column }} between date_sub(current_date(), interval {{ lookback_days + 1 }} day)
-                              and date_sub(current_date(), interval 1 day)
-    group by dt, {% for col in group_by %}{{ col }}{% if not loop.last %}, {% endif %}{% endfor %}
+    where {{ partition_by }} between date_sub(current_date(), interval {{ rolling_window + 1 }} day)
+                            and current_date()
+    group by dt
+        {% if group_cols %}
+            {% for col in group_cols %}
+                , {{ col }}
+            {% endfor %}
+        {% endif %}
 ),
 
--- Moving average for each dimension group over the lookback window (excluding yesterday)
-moving_avg_calc as (
-    select
-        {% for col in group_by %}
-            {{ col }},
-        {% endfor %}
-        avg(metric_value) as moving_avg
+recent_value as (
+    select *
     from base
-    where dt between date_sub(current_date(), interval {{ lookback_days }} day)
-               and date_sub(current_date(), interval 2 day)
-    group by {% for col in group_by %}{{ col }}{% if not loop.last %}, {% endif %}{% endfor %}
+    where dt = date_sub(current_date(), interval 1 day)
 ),
 
--- Yesterday's values
-yesterday_data as (
+history as (
+    select *
+    from base
+    where dt < date_sub(current_date(), interval 1 day)
+),
+
+agg_history as (
     select
-        {% for col in group_by %}
-            b.{{ col }},
-        {% endfor %}
-        b.metric_value,
-        m.moving_avg,
-        b.dt
-    from base b
-    left join moving_avg_calc m
-    on {% for col in group_by %}
-           b.{{ col }} = m.{{ col }}{% if not loop.last %} and {% endif %}
-       {% endfor %}
-    where b.dt = date_sub(current_date(), interval 1 day)
+        {% if group_cols %}
+            {% for col in group_cols %}
+                {{ col }},
+            {% endfor %}
+        {% endif %}
+        avg(metric_value) as moving_avg
+    from history
+    group by
+        {% if group_cols %}
+            {% for col in group_cols %}
+                {{ col }}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+        {% else %}
+            1
+        {% endif %}
+),
+
+final as (
+    select
+        r.dt,
+        r.metric_value,
+        h.moving_avg,
+        {% if group_cols %}
+            {% for col in group_cols %}
+                r.{{ col }}{% if not loop.last %}, {% endif %}
+            {% endfor %}
+        {% endif %}
+    from recent_value r
+    left join agg_history h
+        {% if group_cols %}
+            on 
+            {% for col in group_cols %}
+                r.{{ col }} = h.{{ col }}{% if not loop.last %} and {% endif %}
+            {% endfor %}
+        {% else %}
+            on 1 = 1
+        {% endif %}
 )
 
--- Return rows where deviation exceeds threshold
 select *
-from yesterday_data
+from final
 where moving_avg is not null
-  and (metric_value < moving_avg * (1 - {{ threshold }} / 100.0)
-       or metric_value > moving_avg * (1 + {{ threshold }} / 100.0))
+  and (metric_value > moving_avg * (1 + {{ tolerance }} / 100.0)
+       or metric_value < moving_avg * (1 - {{ tolerance }} / 100.0))
 
 {% endtest %}
