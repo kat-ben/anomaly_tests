@@ -5,7 +5,7 @@
     group_by=None,
     tolerance=20,
     rolling_window=30,
-    column_name=None  -- For use in 'columns:' section
+    column_name=None
 ) %}
 
 {% set group_cols = [] %}
