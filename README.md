@@ -23,11 +23,14 @@ Add to your `packages.yml`:
 ```yml
 packages:
   - git: "https://github.com/kat-ben/anomaly_tests.git"
-    revision: main
+    revision: main```
+
+---
 
 ###  Run
 ``dbt deps
 
+---
 ### Usage Example
 In your properties.yml:
 
