@@ -4,7 +4,8 @@
     time_column,
     group_by,
     threshold,
-    lookback_days
+    lookback_days,
+    column_name=None
 ) %}
 
 {#-- Convert group_by to list if it’s not already --#}
