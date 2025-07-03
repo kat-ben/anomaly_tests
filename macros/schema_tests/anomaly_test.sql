@@ -1,7 +1,7 @@
 {% test anomaly_test(
     model,
     metric_column,
-    partition_by,
+    time_column="date",
     group_by=None,
     tolerance=20,
     rolling_window=30,
@@ -17,7 +17,7 @@
 
 with base as (
     select
-        {{ partition_by }} as dt,
+        {{ time_column }} as dt,
         {% if group_cols %}
             {% for col in group_cols %}
                 {{ col }} as {{ col }},
@@ -25,7 +25,7 @@ with base as (
         {% endif %}
         sum({{ metric_column }}) as metric_value
     from {{ model }}
-    where {{ partition_by }} between date_sub(current_date(), interval {{ rolling_window + 1 }} day)
+    where {{ time_column }} between date_sub(current_date(), interval {{ rolling_window + 1 }} day)
                             and current_date()
     group by dt
         {% if group_cols %}
