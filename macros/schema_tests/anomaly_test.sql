@@ -1,54 +1,65 @@
 {% test anomaly_test(
     model,
     metric_column,
-    partition_by="date",
-    dimension_column=[],
-    threshold=20,
-    column_name=None 
+    group_by=None,
+    threshold,
+    lookback_days,
+    time_column="Date"
 ) %}
 
-{% set dim_cols = [] %}
-{% if dimension_column is string %}
-  {% set dim_cols = [dimension_column] %}
-{% elif dimension_column is iterable %}
-  {% set dim_cols = dimension_column %}
+{% set group_cols = [] %}
+{% if group_by is string %}
+  {% set group_cols = [group_by] %}
+{% elif group_by is iterable %}
+  {% set group_cols = group_by %}
 {% endif %}
 
 with base as (
     select
-        {{ partition_by }} as dt,
+        {{ time_column }} as dt,
         {{ metric_column }} as metric_value,
-        {% for col in dim_cols %}
+        {% for col in group_cols %}
             {{ col }}{% if not loop.last %}, {% endif %}
         {% endfor %}
     from {{ model }}
+    where {{ time_column }} between date_sub(current_date(), interval {{ lookback_days + 1 }} day)
+                              and date_sub(current_date(), interval 1 day)
 ),
 
-yesterday_data as (
-    select *
-    from base
-    where dt = date_sub(current_date(), interval 1 day)
-),
-
-past_30_days as (
+agg_base as (
     select
-        {% for col in dim_cols %}
-            {{ col }}{% if not loop.last %}, {% endif %}
-        {% endfor %},
+        {% for col in group_cols %}
+            {{ col }},{% endfor %}
         avg(metric_value) as moving_avg
     from base
-    where dt between date_sub(current_date(), interval 31 day)
-                 and date_sub(current_date(), interval 2 day)
-    group by {% if dim_cols|length > 0 %}{{ dim_cols | join(', ') }}{% else %}1{% endif %}
+    group by {% for col in group_cols %}{{ col }}{% if not loop.last %}, {% endif %}{% endfor %}
+),
+
+yesterday as (
+    select
+        {% for col in group_cols %}
+            {{ col }},{% endfor %}
+        sum({{ metric_column }}) as metric_value
+    from {{ model }}
+    where {{ time_column }} = date_sub(current_date(), interval 1 day)
+    group by {% for col in group_cols %}{{ col }}{% if not loop.last %}, {% endif %}{% endfor %}
+),
+
+comparison as (
+    select
+        y.*,
+        b.moving_avg
+    from yesterday y
+    left join agg_base b using ({{ group_cols | join(", ") }})
 )
 
-select y.*
-from yesterday_data y
-join past_30_days p
-on {% for col in dim_cols %}
-     y.{{ col }} = p.{{ col }}{% if not loop.last %} and {% endif %}
-   {% endfor %}
-where p.moving_avg is not null
-  and abs(y.metric_value - p.moving_avg) > (p.moving_avg * {{ threshold }} / 100)
+select *
+from comparison
+where moving_avg is not null
+  and (
+    metric_value < (moving_avg * (1 - {{ threshold }} / 100))
+    or
+    metric_value > (moving_avg * (1 + {{ threshold }} / 100))
+)
 
 {% endtest %}
