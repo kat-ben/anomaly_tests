@@ -21,22 +21,24 @@ This reusable dbt test macro detects anomalies by comparing **yesterday’s valu
 Add to your `packages.yml`:
 
 ```yml
-packages:
   - git: "https://github.com/kat-ben/anomaly_tests.git"
-    revision: main```
+    revision: main
+```
 
 ---
 
 ###  Run
-``dbt deps
+```yml
+  dbt deps
+```
 
 ---
 ### Usage Example
 In your properties.yml:
 
-```models:
-  - name: order_metrics
-    description: "Model containing daily order data"
+```yml
+  models:
+  - name: orders
     tests:
       - anomaly_test:
           metric_column: "orders"
@@ -44,6 +46,4 @@ In your properties.yml:
           dimension_column: ["platform", "region"]
           threshold: 25
           lookback_days: 60
-
-
-
+```
