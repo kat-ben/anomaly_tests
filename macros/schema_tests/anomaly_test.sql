@@ -1,4 +1,4 @@
-{% macro test_anomaly_test(
+{% macro anomaly_test(
     model,
     metric_column,
     time_column="date",
