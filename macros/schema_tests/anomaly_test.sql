@@ -26,7 +26,7 @@ with base as (
         sum({{ metric_column }}) as metric_value
     from {{ model }}
     where {{ time_column }} between date_sub(current_date(), interval {{ rolling_window + 1 }} day)
-                              and current_date()
+                            and current_date()
     group by dt
         {% if group_cols %}
             {% for col in group_cols %}
@@ -91,9 +91,7 @@ final as (
 select *
 from final
 where moving_avg is not null
-  and (
-    metric_value > moving_avg * (1 + {{ tolerance }} / 100.0)
-    or metric_value < moving_avg * (1 - {{ tolerance }} / 100.0)
-  )
+  and (metric_value > moving_avg * (1 + {{ tolerance }} / 100.0)
+       or metric_value < moving_avg * (1 - {{ tolerance }} / 100.0))
 
-{% endmacro %}
+{% endtest %}
